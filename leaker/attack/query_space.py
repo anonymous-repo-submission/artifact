@@ -1,0 +1,854 @@
+"""
+For License information see the LICENSE file.
+
+Authors: Johannes Leupold, Amos Treiber, Michael Yonli, Abdelkarim Kati
+
+Implementations of various query spaces.
+"""
+import os
+from logging import getLogger
+from tempfile import TemporaryDirectory
+
+import numpy as np
+
+from collections import Counter
+from itertools import repeat
+from random import random, sample
+from typing import Set, Iterator, Tuple, List
+
+from numpy.random import choice, default_rng
+
+from leaker.attack.markov.util import remove_all_except_keywords
+from ..attack.markov.util import trans_matrix_from_seq, transform, pancake
+from ..api import KeywordQuerySpace, KeywordQueryLog, RangeQuerySpace, Dataset, RangeDatabase, RangeQueryLog, \
+    QuerySequence
+from ..api.constants import CACHE_DIRECTORY
+from ..util import beta_intervals, DummyIdDict
+
+log = getLogger(__name__)
+
+
+class PartialQuerySpace(KeywordQuerySpace):
+    """A query space using only the keywords known to the attacker. All keywords are weighted equally."""
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        yield set(zip(known.keywords(), [1 for _ in range(len(known.keywords()))]))
+
+
+class FullQuerySpace(KeywordQuerySpace):
+    """A query space using the keywords from the full data set. All keywords are weighted equally."""
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        yield set(zip(full.keywords(), [1 for _ in range(len(full.keywords()))]))
+
+    @classmethod
+    def _query_candidates(cls, full: QuerySequence, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        yield full
+
+
+class PartialQueryLogSpace(KeywordQuerySpace):
+    """A query space using the keywords from the query log aggregated over all users.
+    Keywords are weighted according to their frequency in the query log. Queries that do not appear in the
+    relevant dataset are discarded"""
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        yield set([item for item in Counter(query_log.keywords_list()).items() if known.selectivity(item[0]) > 0])
+
+
+class FullQueryLogSpace(KeywordQuerySpace):
+    """A query space using the keywords from the query log aggregated over all users.
+    Keywords are weighted according to their frequency in the query log. Queries that do not appear in the
+    relevant dataset are discarded"""
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        yield set([item for item in Counter(query_log.keywords_list()).items() if full.selectivity(item[0]) > 0])
+
+    """Builds a Transition Matrix out of a Query Log"""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        tmp_matrix, keyword_to_state = trans_matrix_from_seq(query_log.keywords_list(remove_endstates=True), size)
+
+        yield QuerySequence(transition_matrix=tmp_matrix, num_states=len(tmp_matrix[0]), query_list=[],
+                            keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
+                            original_transition_matrix=tmp_matrix)
+
+
+class PartialUserQueryLogSpace(KeywordQuerySpace):
+    """A query space using the keywords from the query log for each user in the query log.
+    Keywords are weighted according to their frequency in the query log of the user. Queries that do not appear in the
+    relevant dataset are discarded"""
+
+    @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True because multiple users are considered individually"""
+        return True
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        for user_id in query_log.user_ids():
+            yield set([item for item in Counter(query_log.keywords_list(user_id)).items()
+                       if known.selectivity(item[0]) > 0])
+
+
+class FullUserQueryLogSpace(KeywordQuerySpace):
+    """A query space using the keywords from the query log for each user in the query log.
+    Keywords are weighted according to their frequency in the query log of the user. Queries that do not appear in the
+    relevant dataset are discarded"""
+
+    @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True because multiple users are considered individually"""
+        return True
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        for user_id in query_log.user_ids():
+            yield set([item for item in Counter(query_log.keywords_list(user_id)).items()
+                       if full.selectivity(item[0]) > 0])
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        for user_id in query_log.user_ids():
+            tmp_matrix, keyword_to_state = trans_matrix_from_seq(query_log.keywords_list(user_id, True), size)
+
+            yield QuerySequence(transition_matrix=tmp_matrix, num_states=len(tmp_matrix[0]), query_list=[],
+                                keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
+                                original_transition_matrix=tmp_matrix)
+
+
+class TransformedFullUserQueryLogSpace(KeywordQuerySpace):
+    """A query space using the keywords from the query log for each user in the query log.
+    Keywords are weighted according to their frequency in the query log of the user. The markov chain is transformed
+    and the keyword_to_state mapping ignored"""
+
+    @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True because multiple users are considered individually"""
+        return True
+
+    @classmethod
+    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
+        for user_id in query_log.user_ids():
+            yield set([item for item in Counter(query_log.keywords_list(user_id)).items()
+                       if full.selectivity(item[0]) > 0])
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        for user_id in query_log.user_ids():
+            tmp_matrix, keyword_to_state = trans_matrix_from_seq(query_log.keywords_list(user_id, True), size)
+
+            transformed_matrix, alt_state_map = transform(tmp_matrix)
+
+            yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]),
+                                query_list=[],
+                                keyword_to_state=keyword_to_state, alt_state_map=alt_state_map,
+                                original_transition_matrix=tmp_matrix)
+
+
+class FullUserSplitQueryLogSpace(KeywordQuerySpace):
+    """A query space using the keywords from the query log for each user in the query log.
+    For each user, only the second half of the query sequence is considered (test set), as the 2nd half is the training
+    set. Has to be used with the SPLIT scenario."""
+
+    @classmethod
+    def is_multi_user(cls) -> bool:
+        """Return True because multiple users are considered individually"""
+        return True
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        for user_id in query_log.user_ids():
+            kw_list = query_log.keywords_list(user_id, True)
+            kw_list = kw_list[len(kw_list) // 2:]
+
+            last = kw_list[-1]
+            while last not in kw_list[:-2]:  # element last needs to appear
+                # one time before becoming the last element
+                kw_list = kw_list[:-1]
+                last = kw_list[-1]
+
+            tmp_matrix, keyword_to_state = trans_matrix_from_seq(kw_list, size)
+
+            yield QuerySequence(transition_matrix=tmp_matrix, num_states=len(tmp_matrix[0]), query_list=[],
+                                keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
+                                original_transition_matrix=tmp_matrix)
+
+class FullUserSplitSUBQueryLogSpace(FullUserSplitQueryLogSpace):
+    """A query space using the keywords from the query log for each user in the query log.
+    For each user, only the second half of the query sequence is considered (test set), as the 2nd half is the training
+    set. It is ensured that the testing set only has the keywords of the train set.
+    Has to be used with the SPLIT_SUB_KNOWN_DIST scenario from evaluator.py."""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        for user_id, test_seq in zip(query_log.user_ids(),
+                                     list(super(FullUserSplitSUBQueryLogSpace, cls)._query_candidates(size, query_log))):
+            train_kw_list = query_log.keywords_list(user_id, True)
+            train_kw_list = train_kw_list[:len(train_kw_list) // 2]
+
+            last = train_kw_list[-1]
+            while last not in train_kw_list[:-2]:  # to eliminate end state, the last element needs to appear at least
+                #  one time before becoming the last element, so we won't have a state with no outgoing edges.
+                train_kw_list = train_kw_list[:-1]
+                last = train_kw_list[-1]
+
+            new_t_mat, new_keyword_to_state = remove_all_except_keywords(test_seq.transition_matrix,
+                                                                         test_seq.keyword_to_state, train_kw_list)
+
+            yield QuerySequence(transition_matrix=new_t_mat, num_states=len(new_t_mat[0]), query_list=[],
+                                keyword_to_state=new_keyword_to_state, alt_state_map=DummyIdDict(),
+                                original_transition_matrix=new_t_mat)
+
+
+class ErdosGraphKeywordQuerySpace(KeywordQuerySpace):
+    """Builds a Transition Matrix out of an Erdos Graph"""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        n = size
+        s = np.random.binomial(n, 0.5, n)
+        mat = [[0 for x in range(n)] for y in range(n)]
+        for i in range(n):
+            samp = sample(range(n), s[i])
+            for k in samp:
+                mat[i][k] = np.random.zipf(2.)
+        mat = [np.array(mat[i]) for i in range(n)]
+
+        trans_mat = np.array([(mat[i] / float(mat[i].sum())) for i in range(n)])
+        keyword_to_state = {i: i for i in range(n)}
+        yield QuerySequence(transition_matrix=trans_mat, num_states=n, query_list=[], keyword_to_state=keyword_to_state,
+                            alt_state_map=DummyIdDict(), original_transition_matrix=trans_mat)
+
+
+class TransformedErdosGraphKeywordQuerySpace(ErdosGraphKeywordQuerySpace):
+    """Builds a Transition Matrix via Erdos graph  Distribution, then transforms it."""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        qseq = next(super(TransformedErdosGraphKeywordQuerySpace, cls)._query_candidates(size, query_log))
+
+        transformed_matrix, alt_state_map = transform(qseq.transition_matrix)
+
+        yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]), query_list=[],
+                            keyword_to_state=qseq.keyword_to_state, alt_state_map=alt_state_map,
+                            original_transition_matrix=qseq.transition_matrix)
+
+
+class ZipfKeywordQuerySpace(KeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf Distribution. """
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        n = size
+        mat = [np.array(np.random.zipf(2., n)) for i in range(n)]
+
+        trans_mat = np.array([(mat[i] / float(mat[i].sum())) for i in range(n)])
+
+        keyword_to_state = {i: i for i in range(n)}
+
+        yield QuerySequence(transition_matrix=trans_mat, num_states=n, query_list=[], keyword_to_state=keyword_to_state,
+                            alt_state_map=DummyIdDict(), original_transition_matrix=trans_mat)
+
+
+class TransformedZipfKeywordQuerySpace(ZipfKeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf  Distribution, then transforms it."""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        qseq = next(super(TransformedZipfKeywordQuerySpace, cls)._query_candidates(size, query_log))
+
+        transformed_matrix, alt_state_map = transform(qseq.transition_matrix)
+
+        yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]), query_list=[],
+                            keyword_to_state=qseq.keyword_to_state, alt_state_map=alt_state_map,
+                            original_transition_matrix=qseq.transition_matrix)
+
+
+class ZipfZipfKeywordQuerySpace(KeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf Zipf Distribution (both the weight of each row and the row content are
+    Zipf-distributed. A minimum hamming weight can be specified."""
+
+    __min_hw: int
+
+    def __init__(self, size: int, query_log: KeywordQueryLog = None, sample_queries: bool = True, min_hw: int = 2):
+        self.__min_hw = min_hw
+
+        super().__init__(size, query_log, sample_queries)
+
+    def _query_candidates(self, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        n = size
+
+        mat = [np.array([]) for y in range(n)]
+        n_ps = list(default_rng().zipf(2., n))  # max hamming weight of each row
+
+        for i in range(n):
+            n_p = min(n_ps[i] + self.__min_hw - 1, n)  # min weight is added
+            mat[i] = np.array(list(default_rng().zipf(2., n_p)), dtype='float')
+            mat[i] /= mat[i].sum()
+            mat[i] = np.append(mat[i], np.array([0 for _ in range(n - n_p)]))
+
+            np.random.shuffle(mat[i])
+
+        trans_mat = np.array([(mat[i] / float(mat[i].sum())) for i in range(n)], dtype='float')
+        keyword_to_state = {i: i for i in range(n)}
+
+        yield QuerySequence(transition_matrix=trans_mat, num_states=n, query_list=[],
+                            keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
+                            original_transition_matrix=trans_mat)
+
+
+class TransformedZipfZipfKeywordQuerySpace(ZipfZipfKeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf Zipf Distribution (both the weight of each row and the row content are
+        Zipf-distributed, then transforms it."""
+
+    def _query_candidates(self, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        qseq = next(super(TransformedZipfZipfKeywordQuerySpace, self)._query_candidates(size, query_log))
+
+        transformed_matrix, alt_state_map = transform(qseq.transition_matrix)
+
+        yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]), query_list=[],
+                            keyword_to_state=qseq.keyword_to_state, alt_state_map=alt_state_map,
+                            original_transition_matrix=qseq.transition_matrix)
+
+
+class PancakeZipfZipfKeywordQuerySpace(ZipfZipfKeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf Zipf Distribution (both the weight of each row and the row content are
+        Zipf-distributed, then transforms it using Pancake."""
+
+    def select(self, n: int, from_original=False) -> Iterator[List[str]]:
+        for user_id, qseq in enumerate(super(PancakeZipfZipfKeywordQuerySpace, self).select(n)):
+            fseq = self.get_full_sequence(user_id)
+            alt_state_map, obs_traces, kwd_to_dummy_st = pancake(qseq, fseq.original_transition_matrix,
+                                                                 fseq.keyword_to_state)
+            fseq._replace(keyword_to_state=kwd_to_dummy_st)
+            fseq._replace(alt_state_map=alt_state_map)
+
+            fseq = QuerySequence(transition_matrix=fseq.transition_matrix, num_states=fseq.num_states,
+                                 query_list=obs_traces, keyword_to_state=kwd_to_dummy_st, alt_state_map=alt_state_map,
+                                 original_transition_matrix=fseq.original_transition_matrix)
+
+            self.__set__(user_id, fseq)
+
+            yield obs_traces
+
+
+class TransformedKeywordQuerySpace(KeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf Distribution (the weight of each row is
+    Zipf-distributed, but all values are equal within the row)."""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        n = size
+
+        mat = [np.array([]) for y in range(n)]
+
+        for i in range(n):
+            n_p = 4
+            mat[i] = np.array(list(default_rng().zipf(2.5, n_p)), dtype='float')
+            mat[i] /= mat[i].sum()
+            mat[i] = np.append(mat[i], np.array([0 for _ in range(n - n_p)]))
+
+        trans_mat = np.array([(mat[i] / float(mat[i].sum())) for i in range(n)], dtype='float')
+        keyword_to_state = {i: i for i in range(n)}
+
+        yield QuerySequence(transition_matrix=trans_mat, num_states=n, query_list=[],
+                            keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
+                            original_transition_matrix=trans_mat)
+
+
+class UniformKeywordQuerySpace(KeywordQuerySpace):
+    """Builds a Transition Matrix via Zipf Distribution"""
+
+    @classmethod
+    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
+        n = size
+        mat = [np.random.rand(n) for i in range(n)]
+
+        trans_mat = np.array([(mat[i] / float(mat[i].sum())) for i in range(n)])
+
+        keyword_to_state = {i: i for i in range(n)}
+
+        yield QuerySequence(transition_matrix=trans_mat, num_states=n, query_list=[], keyword_to_state=keyword_to_state,
+                            alt_state_map=DummyIdDict(),
+                            original_transition_matrix=trans_mat)
+
+
+class UniformRangeQuerySpace(RangeQuerySpace):
+    """A Range query space where queries are generated uniformly at random. If the amount parameter is set to -1,
+    this simulates enough queries s.t. all possible queries are issued."""
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int = -1, allow_repetition: bool = True, allow_empty: bool = True,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+        """
+        Generate queries uniformly at random.
+
+        :param db: The underlying range database.
+        :param amount: Number of queries to generate. -1 = all.
+        :param allow_repetition: Allow same query multiple times
+        :param allow_empty: Allow queries with no matches.
+        :return: A list of queries.
+        """
+        a = db.get_min()
+        b = db.get_max()
+
+        queries: List[Tuple[int, int]] = []
+        for lower in range(a, b + 1):
+            for upper in range(lower, b + 1):
+                if not allow_empty and len(db.query((lower, upper))) == 0:
+                    continue
+                else:
+                    queries.append((lower, upper))
+
+        if amount == -1:
+            amount = len(queries)
+
+        actual_query_idx = choice(len(queries), amount, replace=allow_repetition)  # default is uniform
+
+        return [[queries[x] for x in actual_query_idx]]
+
+
+class ShortRangeQuerySpace(RangeQuerySpace):
+    """
+    Represents queries over short ranges.
+    """
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = True,
+                    allow_empty: bool = True, **kwargs) \
+            -> List[List[Tuple[int, int]]]:
+        """
+        Generate short range queries as per KPT20. This generates queries in a manner which prefers queries over short
+            ranges. Queries are sorted by their increasing distance and are then assigned probabilities in that order
+            from the Beta distribution Beta(alpha, beta).
+
+        :param db: The underlying range database.
+        :param amount: The number of queries to generate.
+        :param allow_repetition: The same query may be chosen multiple times.
+        :param allow_empty: A query with no replies may be chosen.
+        :param kwargs: alpha: Alpha parameter for the Beta distribution that describes the probability of the queries.
+                        beta: Beta parameter of the Beta distribution that describes the probability of the queries.
+        :return: The generated queries.
+        """
+
+        alpha = 1
+        if "alpha" in kwargs:
+            alpha = kwargs["alpha"]
+        beta = 3
+        if "beta" in kwargs:
+            beta = kwargs["beta"]
+
+        a = db.get_min()
+        b = db.get_max()
+        n = b - a + 1  # Not the same as n since we may not care about the replies.
+        r = int(n * (n + 1) / 2)  # all possible range responses
+
+        queries = []
+
+        low_bound = upper_bound = a
+        delta = 0
+        ignored_queries_cnt = 0
+
+        while len(queries) + ignored_queries_cnt < r:
+            results = db.query((low_bound, upper_bound))
+
+            if allow_empty or len(results) > 0:
+                queries.append((low_bound, upper_bound))
+            else:
+                ignored_queries_cnt += 1
+
+            if low_bound + delta + 1 <= b:
+                low_bound += 1
+            else:
+                delta += 1
+                low_bound = a
+
+            upper_bound = low_bound + delta
+
+        l_queries = len(queries)
+        assert l_queries == r - ignored_queries_cnt
+
+        samples = beta_intervals(alpha, beta, l_queries)
+        noisy_samples = [sample * random() / l_queries for sample in samples]
+        tot_prob = sum(noisy_samples)
+        normalised_samples = [elem / tot_prob for elem in noisy_samples]
+
+        if amount == -1:
+            amount = l_queries
+
+        actual_queries = choice(l_queries, amount, p=normalised_samples, replace=allow_repetition)
+
+        return [[queries[x] for x in actual_queries]]
+
+
+class ValueCenteredRangeQuerySpace(RangeQuerySpace):
+    """
+    Class that represents value centered queries as in KPT20 close to Fig. 10.
+    """
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = True, allow_empty: bool = True,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+        """
+        Generate value centered queries as per KPT20.
+
+        :param db: The underlying range database.
+        :param amount: The number of queries to generate.
+        :param allow_repetition: The same query may be chosen multiple times.
+        :param allow_empty: A query with no replies may be chosen.
+        :param kwargs: alpha: Alpha parameter for the Beta distribution that describes the probability of the queries.
+                        beta: Beta parameter of the Beta distribution that describes the probability of the queries.
+        :return: The generated queries.
+        """
+
+        alpha = 1
+        if "alpha" in kwargs:
+            alpha = kwargs["alpha"]
+        beta = 3
+        if "beta" in kwargs:
+            beta = kwargs["beta"]
+
+        a = db.get_min()
+        b = db.get_max()
+        n = b - a + 1  # Not the same as n since we may not care about the replies.
+        r = int(n * (n + 1) / 2)  # all possible range responses
+
+        queries = []
+
+        ignored_queries_cnt = 0
+        vals = list(set(db.get_numerical_values()))
+        old_vals = [a - 1, b + 1]
+
+        while len(queries) + ignored_queries_cnt < r:
+            current_element = choice(vals)
+            vals.remove(current_element)
+
+            if not vals:
+                for x in range(a, b + 1):
+                    if x not in old_vals:
+                        vals.append(x)
+
+            old_vals.append(current_element)
+            old_vals = sorted(old_vals)
+
+            next_bigger = old_vals[old_vals.index(current_element) + 1]
+            next_smaller = old_vals[old_vals.index(current_element) - 1]
+
+            low_max_delta = current_element - next_smaller - 1
+            up_max_delta = next_bigger - current_element - 1
+            max_delta = low_max_delta + up_max_delta
+
+            for delta in range(max_delta + 1):
+                for low_delta in range(max(0, delta - up_max_delta), min(low_max_delta, delta) + 1):
+                    lower_bound = current_element - low_delta
+                    upper_bound = lower_bound + delta
+
+                    assert (current_element - low_max_delta <= lower_bound)
+                    assert (current_element + up_max_delta >= upper_bound)
+
+                    query = (lower_bound, upper_bound)
+                    if allow_empty or len(db.query(query)) > 0:
+                        queries.append(query)
+                    else:
+                        ignored_queries_cnt += 1
+
+        assert len(queries) == r - ignored_queries_cnt
+        l_queries = len(queries)
+
+        samples = beta_intervals(alpha, beta, l_queries)
+        noisy_samples = [sample * random() / l_queries for sample in samples]
+        tot_prob = sum(noisy_samples)
+        normalised_samples = [elem / tot_prob for elem in noisy_samples]
+
+        if amount == -1:
+            amount = l_queries
+
+        actual_queries = choice(l_queries, amount, p=normalised_samples, replace=allow_repetition)
+
+        return [[queries[x] for x in actual_queries]]
+
+
+class QueryLogRangeQuerySpace(RangeQuerySpace):
+    """
+    A range query space using the queries from a query log for all users (aggregated) in the query log.
+    Pass non-existing bounds (denoted by None) as db.min() or db.max() respectively.
+    """
+
+    def __init__(self, db: RangeDatabase, amount: int = -1, allow_repetition: bool = True, allow_empty: bool = True,
+                 **kwargs):
+        """Do not resample, as space is created only once"""
+        super().__init__(db, amount, allow_repetition, allow_empty, False, **kwargs)
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = True, allow_empty: bool = True,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+
+        if "qlog" not in kwargs:
+            raise ValueError("qlog must be supplied to create query log RangeQuerySpace")
+
+        qlog: RangeQueryLog = kwargs["qlog"]
+
+        if allow_repetition:
+            queries = [query for item in qlog.queries_freq().items() for query in repeat(item[0], item[1])]
+        else:
+            queries = qlog.queries()
+
+        if not allow_empty:
+            queries = [query for query in queries if len(db.query(query)) > 0]
+
+        if len(queries) > amount:
+            queries = queries[:amount]
+
+        q = []
+        for query in queries:
+            lower = query[0]
+            upper = query[1]
+            if lower is None:
+                lower = db.get_min()
+            else:
+                lower -= db.get_original_min() - 1  # map to DB version scaled to [1...N]
+            if upper is None:
+                upper = db.get_max()
+            else:
+                upper -= db.get_original_min() - 1  # map to DB version scaled to [1...N]
+
+            q.append((lower, upper))
+
+        return [q]
+
+
+class UserQueryLogRangeQuerySpace(QueryLogRangeQuerySpace):
+    """
+    A range query space using the queries from a query log for each user in the query log.
+    """
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = True, allow_empty: bool = True,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+        """
+        :param db: The underlying range database.
+        :param amount: The max number of queries to generate.
+        :param allow_repetition: The same query may be chosen multiple times.
+        :param allow_empty: A query with no replies may be chosen.
+        :param kwargs: qlog: RangeQueryLog: The Query Log to take queries from
+        :return: The generated queries."""
+
+        if "qlog" not in kwargs:
+            raise ValueError("qlog must be supplied to create query log RangeQuerySpace")
+
+        qlog: RangeQueryLog = kwargs["qlog"]
+
+        res = []
+
+        for user_id in qlog.user_ids():
+            if allow_repetition:
+                queries = [query for item in qlog.queries_freq().items() for query in repeat(item[0], item[1])]
+            else:
+                queries = qlog.queries(user_id)
+
+            if not allow_empty:
+                queries = [query for query in queries if len(db.query(query)) > 0]
+
+            if len(queries) > amount:
+                queries = queries[:amount]
+
+            q = []
+            for lower, upper in queries:
+                if lower is None:
+                    lower = db.get_min()
+                else:
+                    lower -= db.get_original_min() - 1  # map to DB version scaled to [1...N]
+                if upper is None:
+                    upper = db.get_max()
+                else:
+                    upper -= db.get_original_min() - 1  # map to DB version scaled to [1...N]
+
+                q.append((lower, upper))
+
+            res.append(q)
+
+        return res
+
+
+class BoundedRangeQuerySpace(RangeQuerySpace):
+    """
+    Represent a QuerySpace such that b is an upper bound on the maximum number of discrete distinct values that might
+    be returned by a query.
+
+    Allow empty is always assumed to be False and thus ignored.
+    """
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = False, allow_empty: bool = False,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+        vals = sorted(set(db.get_numerical_values()))
+
+        if allow_empty:
+            raise ValueError("allow_empty is assumed to be false")
+
+        bound = 3
+        if "bound" in kwargs:
+            bound = kwargs['bound']
+
+        # This formula is obtained by calculating the difference between two fibonacci sums for n and (n - b)
+        max_n = bound * len(vals) - bound * (bound - 1) // 2
+        if amount == -1:
+            amount = max_n
+
+        queries = []
+        for lower in range(0, len(vals)):
+            for upper in range(lower, min(lower + bound, len(vals))):
+                query = (vals[lower], vals[upper])
+                assert len(db.query(query)) != 0
+
+                if allow_repetition or query not in queries:
+                    queries.append(query)
+
+        actual_query_idx = choice(len(queries), amount, replace=allow_repetition)
+
+        return [[queries[x] for x in actual_query_idx]]
+
+
+class MissingBoundedRangeQuerySpace(BoundedRangeQuerySpace):
+    """
+    Drops k queries which are not "two-way" or single values queries.
+    """
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = False, allow_empty: bool = False,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+        k = 1
+        if 'k' in kwargs:
+            k = kwargs['k']
+
+        if allow_empty:
+            raise ValueError("allow_empty is assumed to be false")
+
+        bound = 3
+        if "bound" in kwargs:
+            bound = kwargs['bound']
+
+        assert k < bound - 1
+
+        queries = BoundedRangeQuerySpace.gen_queries(db, -1, allow_repetition=False, allow_empty=False, bound=bound)[0]
+
+        '''Drop k volumes per window:'''
+        dropped = set()
+        for i in reversed(range(db.get_min(), db.get_max() - bound - 1)):
+
+            q = [(i, i + num) for num in range(2, bound + 1) if (i, i + num) in queries and (i, i + num) not in dropped]
+            '''How many more queries need to be dropped for this window:'''
+            k_p = min(max(0, k - len(set([(i + j, i + num) for num in range(bound)
+                                          for j in range(num + 1)]).intersection(dropped))),
+                      k)
+            drops = choice(len(q), min(k_p, len(q)), replace=False)
+            for drop in drops:
+                queries.remove(q[drop])
+                dropped.add(q[drop])
+
+        for i in range(db.get_min(), db.get_max() + 1):
+            assert (i, i) in queries
+            if i < db.get_max() - 1:
+                assert (i, i + 1) in queries
+                if i < db.get_max() - bound - 1:
+                    assert len({(i + j, i + num) for num in range(bound) for j in range(num + 1)
+                                if (i + j, i + num) in queries}) >= bound * (bound + 1) / 2 - k
+
+        if amount == -1 or amount > len(queries) and not allow_repetition:
+            amount = len(queries)
+
+        actual_query_idx = choice(len(queries), amount, replace=allow_repetition)
+
+        return [[queries[x] for x in actual_query_idx]]
+
+
+class ZipfRangeQuerySpace(RangeQuerySpace):
+    """Creates a Zipf-like distribution of queries. Can be restricted to only consider a fraction of possible
+    queries with the restrict_frac parameter"""
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = True, allow_empty: bool = True,
+                    **kwargs) -> List[List[Tuple[int, int]]]:
+        """
+        :param db: The underlying range database.
+        :param amount: The max number of queries to generate.
+        :param allow_repetition: The same query may be chosen multiple times.
+        :param allow_empty: A query with no replies may be chosen.
+        :param kwargs:  s: Zipf exponent
+                        width: Optional max width of generated queries
+                        restrict_frac: Fraction of possible queries (N(N+1)/2) to be considered
+        :return: The generated queries."""
+        s = 5
+        if 's' in kwargs:
+            s = kwargs['s']
+
+        queries = UniformRangeQuerySpace.gen_queries(db, -1, False, allow_empty)[0]
+
+        big_n = db.get_max() - db.get_min() + 1
+        max_n = big_n * (big_n + 1) // 2
+
+        if 'width' in kwargs:
+            bound = kwargs['width']
+            queries = [q for q in queries if q[1] - q[0] <= bound]
+
+        if 'restrict_frac' in kwargs:
+            num_unique_queries = int(kwargs['restrict_frac'] * max_n)
+            if len(queries) > num_unique_queries > 0:
+                queries = queries[:num_unique_queries]
+            if num_unique_queries < 0:
+                log.warning(f"Provided restriction fraction yielded empty query space; restriction is discarded.")
+
+        weights = np.array(list(default_rng().zipf(s, len(queries))), dtype='float')
+        weights /= weights.sum()
+
+        if amount == -1:
+            amount = len(queries)
+
+        actual_query_idx = choice(len(queries), amount, p=weights, replace=allow_repetition)
+
+        return [[queries[x] for x in actual_query_idx]]
+
+
+class PermutedBetaRangeQuerySpace(RangeQuerySpace):
+
+    @classmethod
+    def gen_queries(cls, db: RangeDatabase, amount: int, allow_repetition: bool = True,
+                    allow_empty: bool = True, **kwargs) \
+            -> List[List[Tuple[int, int]]]:
+        """
+        Generate permuted beta queries as per KPT21.
+
+        :param db: The underlying range database.
+        :param amount: The number of queries to generate.
+        :param allow_repetition: The same query may be chosen multiple times.
+        :param allow_empty: A query with no replies may be chosen.
+        :param kwargs: alpha: Alpha parameter for the Beta distribution that describes the probability of the queries.
+                        beta: Beta parameter of the Beta distribution that describes the probability of the queries.
+        :return: The generated queries.
+        """
+
+        alpha = 1
+        if "alpha" in kwargs:
+            alpha = kwargs["alpha"]
+        beta = 3
+        if "beta" in kwargs:
+            beta = kwargs["beta"]
+
+        queries = UniformRangeQuerySpace.gen_queries(db, -1, False, allow_empty)[0]
+
+        weights = np.array(beta_intervals(alpha, beta, len(queries)), dtype='float')
+        weights /= weights.sum()
+
+        np.random.shuffle(weights)
+
+        if amount == -1:
+            amount = len(queries)
+
+        actual_query_idx = choice(len(queries), amount, p=weights, replace=allow_repetition)
+
+        return [[queries[x] for x in actual_query_idx]]
