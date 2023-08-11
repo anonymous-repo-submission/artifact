@@ -19,7 +19,7 @@ from typing import Set, Iterator, Tuple, List
 from numpy.random import choice, default_rng
 
 from leaker.attack.markov.util import remove_all_except_keywords
-from ..attack.markov.util import trans_matrix_from_seq, transform, pancake
+from ..attack.markov.util import trans_matrix_from_seq
 from ..api import KeywordQuerySpace, KeywordQueryLog, RangeQuerySpace, Dataset, RangeDatabase, RangeQueryLog, \
     QuerySequence
 from ..api.constants import CACHE_DIRECTORY
@@ -121,33 +121,6 @@ class FullUserQueryLogSpace(KeywordQuerySpace):
                                 original_transition_matrix=tmp_matrix)
 
 
-class TransformedFullUserQueryLogSpace(KeywordQuerySpace):
-    """A query space using the keywords from the query log for each user in the query log.
-    Keywords are weighted according to their frequency in the query log of the user. The markov chain is transformed
-    and the keyword_to_state mapping ignored"""
-
-    @classmethod
-    def is_multi_user(cls) -> bool:
-        """Return True because multiple users are considered individually"""
-        return True
-
-    @classmethod
-    def _candidates(cls, full: Dataset, known: Dataset, query_log: KeywordQueryLog) -> Iterator[Set[Tuple[str, int]]]:
-        for user_id in query_log.user_ids():
-            yield set([item for item in Counter(query_log.keywords_list(user_id)).items()
-                       if full.selectivity(item[0]) > 0])
-
-    @classmethod
-    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
-        for user_id in query_log.user_ids():
-            tmp_matrix, keyword_to_state = trans_matrix_from_seq(query_log.keywords_list(user_id, True), size)
-
-            transformed_matrix, alt_state_map = transform(tmp_matrix)
-
-            yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]),
-                                query_list=[],
-                                keyword_to_state=keyword_to_state, alt_state_map=alt_state_map,
-                                original_transition_matrix=tmp_matrix)
 
 
 class FullUserSplitQueryLogSpace(KeywordQuerySpace):
@@ -225,18 +198,6 @@ class ErdosGraphKeywordQuerySpace(KeywordQuerySpace):
                             alt_state_map=DummyIdDict(), original_transition_matrix=trans_mat)
 
 
-class TransformedErdosGraphKeywordQuerySpace(ErdosGraphKeywordQuerySpace):
-    """Builds a Transition Matrix via Erdos graph  Distribution, then transforms it."""
-
-    @classmethod
-    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
-        qseq = next(super(TransformedErdosGraphKeywordQuerySpace, cls)._query_candidates(size, query_log))
-
-        transformed_matrix, alt_state_map = transform(qseq.transition_matrix)
-
-        yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]), query_list=[],
-                            keyword_to_state=qseq.keyword_to_state, alt_state_map=alt_state_map,
-                            original_transition_matrix=qseq.transition_matrix)
 
 
 class ZipfKeywordQuerySpace(KeywordQuerySpace):
@@ -255,18 +216,6 @@ class ZipfKeywordQuerySpace(KeywordQuerySpace):
                             alt_state_map=DummyIdDict(), original_transition_matrix=trans_mat)
 
 
-class TransformedZipfKeywordQuerySpace(ZipfKeywordQuerySpace):
-    """Builds a Transition Matrix via Zipf  Distribution, then transforms it."""
-
-    @classmethod
-    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
-        qseq = next(super(TransformedZipfKeywordQuerySpace, cls)._query_candidates(size, query_log))
-
-        transformed_matrix, alt_state_map = transform(qseq.transition_matrix)
-
-        yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]), query_list=[],
-                            keyword_to_state=qseq.keyword_to_state, alt_state_map=alt_state_map,
-                            original_transition_matrix=qseq.transition_matrix)
 
 
 class ZipfZipfKeywordQuerySpace(KeywordQuerySpace):
@@ -301,64 +250,6 @@ class ZipfZipfKeywordQuerySpace(KeywordQuerySpace):
                             keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
                             original_transition_matrix=trans_mat)
 
-
-class TransformedZipfZipfKeywordQuerySpace(ZipfZipfKeywordQuerySpace):
-    """Builds a Transition Matrix via Zipf Zipf Distribution (both the weight of each row and the row content are
-        Zipf-distributed, then transforms it."""
-
-    def _query_candidates(self, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
-        qseq = next(super(TransformedZipfZipfKeywordQuerySpace, self)._query_candidates(size, query_log))
-
-        transformed_matrix, alt_state_map = transform(qseq.transition_matrix)
-
-        yield QuerySequence(transition_matrix=transformed_matrix, num_states=len(transformed_matrix[0]), query_list=[],
-                            keyword_to_state=qseq.keyword_to_state, alt_state_map=alt_state_map,
-                            original_transition_matrix=qseq.transition_matrix)
-
-
-class PancakeZipfZipfKeywordQuerySpace(ZipfZipfKeywordQuerySpace):
-    """Builds a Transition Matrix via Zipf Zipf Distribution (both the weight of each row and the row content are
-        Zipf-distributed, then transforms it using Pancake."""
-
-    def select(self, n: int, from_original=False) -> Iterator[List[str]]:
-        for user_id, qseq in enumerate(super(PancakeZipfZipfKeywordQuerySpace, self).select(n)):
-            fseq = self.get_full_sequence(user_id)
-            alt_state_map, obs_traces, kwd_to_dummy_st = pancake(qseq, fseq.original_transition_matrix,
-                                                                 fseq.keyword_to_state)
-            fseq._replace(keyword_to_state=kwd_to_dummy_st)
-            fseq._replace(alt_state_map=alt_state_map)
-
-            fseq = QuerySequence(transition_matrix=fseq.transition_matrix, num_states=fseq.num_states,
-                                 query_list=obs_traces, keyword_to_state=kwd_to_dummy_st, alt_state_map=alt_state_map,
-                                 original_transition_matrix=fseq.original_transition_matrix)
-
-            self.__set__(user_id, fseq)
-
-            yield obs_traces
-
-
-class TransformedKeywordQuerySpace(KeywordQuerySpace):
-    """Builds a Transition Matrix via Zipf Distribution (the weight of each row is
-    Zipf-distributed, but all values are equal within the row)."""
-
-    @classmethod
-    def _query_candidates(cls, size: int, query_log: KeywordQueryLog) -> Iterator[QuerySequence]:
-        n = size
-
-        mat = [np.array([]) for y in range(n)]
-
-        for i in range(n):
-            n_p = 4
-            mat[i] = np.array(list(default_rng().zipf(2.5, n_p)), dtype='float')
-            mat[i] /= mat[i].sum()
-            mat[i] = np.append(mat[i], np.array([0 for _ in range(n - n_p)]))
-
-        trans_mat = np.array([(mat[i] / float(mat[i].sum())) for i in range(n)], dtype='float')
-        keyword_to_state = {i: i for i in range(n)}
-
-        yield QuerySequence(transition_matrix=trans_mat, num_states=n, query_list=[],
-                            keyword_to_state=keyword_to_state, alt_state_map=DummyIdDict(),
-                            original_transition_matrix=trans_mat)
 
 
 class UniformKeywordQuerySpace(KeywordQuerySpace):

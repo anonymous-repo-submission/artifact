@@ -5,32 +5,16 @@ For License information see the LICENSE file.
 
 """
 import logging
-import random
 import sys
-import numpy as np
 
-import matplotlib.pyplot as plt
-
-from typing import List, Iterable, Tuple
-
-from leaker.api import InputDocument, Dataset, Selectivity, RandomRangeDatabase, RangeAttack, LeakagePattern, \
-    RangeDatabase, QDRangeDatabase, BaseRangeDatabase, QueryInputDocument, QuerySequence
-from leaker.attack import Countv2, PartialQuerySpace, GeneralizedKKNO, UniformRangeQuerySpace, \
-    ValueCenteredRangeQuerySpace, ZipfRangeQuerySpace, ApproxValue, Apa, GLMP18, VolAn, SelVolAn, SubgraphID, \
-    SubgraphVL, FullQuerySpace, MarkovSorting, ErdosGraphKeywordQuerySpace, FullQueryLogSpace, FullUserQueryLogSpace, \
-    MarkovBaumWelch, PartialUserQueryLogSpace, MarkovIHOP, ZipfKeywordQuerySpace
-from leaker.attack.dummy import DummmyKeywordQueryAttack
+from leaker.attack import MarkovSorting, FullUserQueryLogSpace, MarkovIHOP
 from leaker.attack.markov import MarkovDecoding
-from leaker.evaluation import DatasetSampler, EvaluationCase, QuerySelector, KeywordAttackEvaluator, MAError, \
-    RangeAttackEvaluator, CountSError
+from leaker.evaluation import EvaluationCase
 from leaker.evaluation.evaluator import KeywordQueryAttackEvaluator
 from leaker.evaluation.param import KeywordQueryScenario
-from leaker.plotting import KeywordMatPlotLibSink, RangeMatPlotLibSink
-from leaker.preprocessing import Filter, Sink, Preprocessor
-from leaker.preprocessing.data import DirectoryEnumerator, RelativeFile, FileLoader, EMailParser, FileToDocument, \
-    RelativeContainsFilter, GoogleLogParser, FileToQueryInputDocument, CsvParser
-from leaker.whoosh_interface import WhooshWriter, WhooshBackend, WhooshQueryLogWriter
-from leaker.attack.query_space import ZipfZipfKeywordQuerySpace, FullUserSplitQueryLogSpace
+from leaker.plotting import RangeMatPlotLibSink
+from leaker.whoosh_interface import WhooshBackend
+from leaker.attack.query_space import FullUserSplitQueryLogSpace
 
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')
@@ -44,18 +28,7 @@ file.setFormatter(f)
 logging.basicConfig(handlers=[console, file], level=logging.INFO)
 
 log = logging.getLogger(__name__)
-"""
-tairql = DirectoryEnumerator("../../data_sources/TAIR/query_log/")
 
-tairql_filter: Filter[RelativeFile, QueryInputDocument] = FileLoader(CsvParser(content_attribute_pos=4,
-                                                                               payload_attribute_pos=0,
-                                                                               delimiter=',')) | \
-                                                          FileToQueryInputDocument()
-tairql_sink: Sink[InputDocument] = WhooshQueryLogWriter("tair_ql")
-
-preprocessor = Preprocessor(tairql, [tairql_filter > tairql_sink])
-preprocessor.run()
-"""
 
 backend = WhooshBackend()
 file_description = "test"

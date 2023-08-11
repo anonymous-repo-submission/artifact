@@ -1,13 +1,14 @@
-## LEAKER
-### A framework for LEakage AttacK Evaluation on Real-world data
+## MAPLE
+### MAPLE: MArkov Process Leakage attacks on Encrypted Search
 
-###### This framework allows for an easy evaluation of leakage attacks against encrypted search.
+###### LEAKER: A framework that allows for an easy evaluation of leakage attacks against encrypted search on real-world data.
 
 ---
 
 #### Our Markov Attacks:
-We have extended the leaker framework in order to evaluate our attacks `Sorting` and `Decoding` against the state of the art 
-attack`IHOP`[[OK22]](https://doi.org/10.48550/arXiv.2110.04180).
+
+This repository contains an extension of the `LEAKER` framework in order to evaluate our new query equality leakage attacks
+`Stationary` and `Decoding` in the dependent queries setting against the state of the art attack`IHOP`[[OK22]](https://doi.org/10.48550/arXiv.2110.04180).
 The implementation of the attacks can be found in `leaker/attack/markov` directory.
 
 Refer to `tests/test_markov_attacks.py` to see a standalone test case for our attacks in both 
@@ -18,10 +19,6 @@ the indexing files can be found in `evaluation/keyword/index_aol.py` & `evaluati
 
 The evaluation files needed in order to reproduce the results of our paper can be found in: 
 `evaluation/keyword/eval_keyword_query_attacks_artificial.py`  & `evaluation/keyword/eval_keyword_query_attacks.py`
-
-
-
-
 
 ---
 

@@ -7,13 +7,9 @@ For License information see the LICENSE file.
 
 """
 import os
-from collections import Counter
 from tempfile import TemporaryDirectory
-
 import hidden_markov
-import argparse
 import numpy as np
-
 import random
 
 # NOTE: Documentation for the hidden_markov library can be found at https://hidden-markov.readthedocs.io/en/latest/

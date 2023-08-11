@@ -4,27 +4,21 @@ For License information see the LICENSE file.
 
 """
 import logging
-import math
 import random
 import sys
-from typing import Callable, Set
-
+from typing import Callable
 import numpy as np
-import pytest
 
-from leaker.api import DataSink, QuerySequence
+
+from leaker.api import DataSink
 from leaker.api.dataset import DummyKeywordQueryLogFromList
 from leaker.attack import MarkovSorting, MarkovIHOP
 from leaker.attack.markov import MarkovDecoding
 
-from leaker.attack.query_space import ErdosGraphKeywordQuerySpace, ZipfKeywordQuerySpace, UniformKeywordQuerySpace, \
-    ZipfZipfKeywordQuerySpace, FullUserQueryLogSpace
-from leaker.evaluation import KeywordAttackEvaluator, EvaluationCase, DatasetSampler, QuerySelector
+from leaker.attack.query_space import ZipfZipfKeywordQuerySpace, FullUserQueryLogSpace
+from leaker.evaluation import EvaluationCase
 from leaker.evaluation.evaluator import KeywordQueryAttackEvaluator
 from leaker.evaluation.param import KeywordQueryScenario
-from leaker.preprocessing import Preprocessor, Filter, Sink
-from leaker.whoosh_interface import WhooshBackend, WhooshWriter
-
 
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')

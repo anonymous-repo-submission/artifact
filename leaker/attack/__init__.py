@@ -2,7 +2,7 @@ from .query_space import FullQuerySpace, PartialQuerySpace, FullQueryLogSpace, P
     FullUserQueryLogSpace, PartialUserQueryLogSpace, UniformRangeQuerySpace, ShortRangeQuerySpace,\
     ValueCenteredRangeQuerySpace, BoundedRangeQuerySpace, QueryLogRangeQuerySpace, UserQueryLogRangeQuerySpace, \
     ZipfRangeQuerySpace, PermutedBetaRangeQuerySpace, ErdosGraphKeywordQuerySpace, UniformKeywordQuerySpace,\
-    ZipfKeywordQuerySpace,  PancakeZipfZipfKeywordQuerySpace
+    ZipfKeywordQuerySpace, ZipfZipfKeywordQuerySpace
 from .sel_vol_an import SelVolAn
 from .subgraph import SubgraphID, SubgraphVL
 from .vol_an import VolAn
@@ -17,14 +17,14 @@ from .glmp19 import ApproxValue, ApproxOrder
 from .glmp18 import GLMP18
 from .dummy import RangeBaselineAttack, RangeCountBaselineAttack
 from .gjw import GJWbasic, GJWspurious, GJWmissing, GJWpartial
-from .markov import MarkovSorting, MarkovDecoding, MarkovBaumWelch, MarkovIHOP, TransformedMarkovSorting, TransformedMarkovDecoding, TransformedMarkovIHOP, PancakeMarkovIHOP, PancakeMarkovSorting, PancakeMarkovDecoding, BinomialMarkovDecoding
+from .markov import MarkovSorting, MarkovDecoding, MarkovIHOP, BinomialMarkovDecoding
 
 __all__ = [
     'FullQuerySpace', 'PartialQuerySpace', 'FullQueryLogSpace', 'PartialQueryLogSpace', 'FullUserQueryLogSpace',
     'PartialUserQueryLogSpace', 'UniformRangeQuerySpace', 'ShortRangeQuerySpace', 'ValueCenteredRangeQuerySpace',
     'QueryLogRangeQuerySpace', 'UserQueryLogRangeQuerySpace', 'BoundedRangeQuerySpace', 'ZipfRangeQuerySpace',
     'PermutedBetaRangeQuerySpace', 'ErdosGraphKeywordQuerySpace', 'UniformKeywordQuerySpace',
-    'ZipfKeywordQuerySpace', 'PancakeZipfZipfKeywordQuerySpace', # query_space.py
+    'ZipfKeywordQuerySpace', 'ZipfZipfKeywordQuerySpace', # query_space.py
 
     'VolAn',  # vol_an.py
 
@@ -58,5 +58,5 @@ __all__ = [
 
     'GJWbasic', 'GJWspurious',  'GJWmissing', 'GJWpartial',  # gjw.py
 
-    'MarkovSorting', 'MarkovDecoding', 'MarkovBaumWelch', 'MarkovIHOP', 'TransformedMarkovSorting', 'TransformedMarkovDecoding', 'TransformedMarkovIHOP', 'PancakeMarkovIHOP', 'PancakeMarkovSorting', 'PancakeMarkovDecoding', 'BinomialMarkovDecoding',# markov
+    'MarkovSorting', 'MarkovDecoding', 'MarkovIHOP',  'BinomialMarkovDecoding',  # markov
 ]

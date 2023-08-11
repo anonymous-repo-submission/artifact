@@ -13,7 +13,7 @@ from hmmlearn import hmm
 
 from leaker.api import Extension, KeywordQueryAttack, LeakagePattern, QuerySequence
 from leaker.pattern import QueryEquality
-from .util import calc_stationary_dist, trans_matrix_from_seq, transform, print_stats, pancake
+from .util import calc_stationary_dist, trans_matrix_from_seq, print_stats
 from scipy.stats import binom
 
 log = getLogger(__name__)
@@ -23,8 +23,6 @@ E = TypeVar("E", bound=Extension, covariant=True)
 
 class MarkovDecoding(KeywordQueryAttack):
     __ep: float
-    _transform: bool
-    _pancake: bool
     _binomial: bool
 
     def __init__(self, known: Union[QuerySequence, List[List[str]]], ep: float = 0.0005):
@@ -34,8 +32,6 @@ class MarkovDecoding(KeywordQueryAttack):
         else:
             self.__known = [known]
         self.__ep = ep
-        self._transform = False
-        self._pancake = False
         self._binomial = False
 
     @classmethod
@@ -65,7 +61,7 @@ class MarkovDecoding(KeywordQueryAttack):
             else:
                 num_states_adv = len(set(u_seq))
 
-            if num_states_adv < num_states_user and not self._transform:
+            if num_states_adv < num_states_user :
                 continue  # skip adv knowledge again if more user states than adv states are observed
             if isinstance(u_seq, QuerySequence):
                 t_mat_adv = u_seq.original_transition_matrix
@@ -73,26 +69,9 @@ class MarkovDecoding(KeywordQueryAttack):
             else:
                 t_mat_adv, keyword_to_state = trans_matrix_from_seq(u_seq, num_states_adv)
 
-            if self._transform:
-                t_mat_adv, alt_map = transform(t_mat_adv)
-                num_states_adv = len(t_mat_adv[0])
-                print(f"New num: {num_states_adv}")
-
-                # if num_states_adv < num_states_user:
-                #    continue
 
             stationary_dist = calc_stationary_dist(t_mat_adv)
             print_stats(t_mat_adv)
-            #TODO - not yet implemented
-            if self._pancake:
-
-                alt_state_map, obs_traces, kwd_to_dummy_st = pancake(queries, t_mat_adv)
-                num_states_adv = len(set(obs_traces))
-                t_mat_adv, keyword_to_state = trans_matrix_from_seq(obs_traces, num_states_adv)
-                recovered = ["" for q in obs_traces]
-                stationary_dist = calc_stationary_dist(t_mat_adv)
-                if num_states_adv < num_states_user:
-                    continue
 
             big_o = [[None] * unique_queries for _ in range(num_states_adv)]
 
@@ -129,11 +108,6 @@ class MarkovDecoding(KeywordQueryAttack):
 
                 recovered = []
                 for s in predicted_states:
-                    if self._transform:
-                        s = alt_map[s]
-                    if self._pancake:
-                        # here add the needed changes for pancake integration
-                        continue
                     if s in keyword_to_state.inverse.keys():
                         recovered.append(keyword_to_state.inverse[s])
                     else:
@@ -141,25 +115,6 @@ class MarkovDecoding(KeywordQueryAttack):
 
         return recovered
 
-
-class TransformedMarkovDecoding(MarkovDecoding):
-    def __init__(self, known: Union[QuerySequence, List[List[str]]], ep: float = 0.0005):
-        super().__init__(known, ep)
-        self._transform = True
-
-    @classmethod
-    def name(cls) -> str:
-        return "TransformedMarkovDecoding"
-
-
-class PancakeMarkovDecoding(MarkovDecoding):
-    def __init__(self, known: Union[QuerySequence, List[List[str]]], ep: float = 0.0005):
-        super().__init__(known, ep)
-        self._pancake = True
-
-    @classmethod
-    def name(cls) -> str:
-        return "PancakeMarkovDecoding"
 
 class BinomialMarkovDecoding(MarkovDecoding):
     def __init__(self, known: Union[QuerySequence, List[List[str]]], ep: float = 0.0005):

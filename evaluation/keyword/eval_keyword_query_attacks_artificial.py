@@ -9,11 +9,12 @@ import sys
 
 from leaker.attack import MarkovSorting, MarkovIHOP
 from leaker.attack.markov import MarkovDecoding
-from leaker.attack.query_space import ZipfZipfKeywordQuerySpace
+from leaker.attack.query_space import ZipfZipfKeywordQuerySpace, ErdosGraphKeywordQuerySpace, UniformKeywordQuerySpace, ZipfKeywordQuerySpace
 from leaker.evaluation import EvaluationCase
 from leaker.evaluation.evaluator import KeywordQueryAttackEvaluator
 from leaker.evaluation.param import KeywordQueryScenario
 from leaker.plotting import RangeMatPlotLibSink
+
 
 f = logging.Formatter(fmt='{asctime} {levelname:8.8} {process} --- [{threadName:12.12}] {name:32.32}: {message}',
                       style='{')

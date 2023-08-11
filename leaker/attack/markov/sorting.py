@@ -13,7 +13,7 @@ from bidict import bidict
 
 from leaker.api import Extension, KeywordQueryAttack, LeakagePattern, QuerySequence
 from leaker.pattern import QueryEquality
-from .util import calc_stationary_dist, trans_matrix_from_seq, transform, print_stats, pancake
+from .util import calc_stationary_dist, trans_matrix_from_seq, print_stats
 
 log = getLogger(__name__)
 
@@ -21,8 +21,6 @@ E = TypeVar("E", bound=Extension, covariant=True)
 
 
 class MarkovSorting(KeywordQueryAttack):
-    _transform: bool
-    _pancake: bool
 
     def __init__(self, known: Union[QuerySequence, List[List[str]]], **kwargs):
         super().__init__(known, **kwargs)
@@ -30,8 +28,6 @@ class MarkovSorting(KeywordQueryAttack):
             self.__known = known
         else:
             self.__known = [known]
-        self._transform = False
-        self._pancake = False
 
     @classmethod
     def name(cls) -> str:
@@ -55,7 +51,7 @@ class MarkovSorting(KeywordQueryAttack):
             else:
                 num_states_adv = len(set(u_seq))
 
-            if num_states_adv < num_states_user and not self._transform:
+            if num_states_adv < num_states_user:
                 continue  # skip adv knowledge again if more user states than adv states are observed
             if isinstance(u_seq, QuerySequence):
                 t_mat_adv = u_seq.original_transition_matrix
@@ -63,25 +59,8 @@ class MarkovSorting(KeywordQueryAttack):
             else:
                 t_mat_adv, keyword_to_state = trans_matrix_from_seq(u_seq, num_states_adv)
 
-            if self._transform:
-                t_mat_adv, alt_map = transform(t_mat_adv)
-                num_states_adv = len(t_mat_adv[0])
-                # if num_states_adv < num_states_user:
-                #    continue
 
             stationary_dist = calc_stationary_dist(t_mat_adv)
-            #TODO - not yet implemented
-            if self._pancake:
-
-                alt_state_map, obs_traces, kwd_to_dummy_st = pancake(queries, t_mat_adv)
-                num_states_adv = len(set(obs_traces))
-                t_mat_adv, keyword_to_state = trans_matrix_from_seq(obs_traces, num_states_adv)
-                cntr = Counter(obs_traces)
-                recovered = ["" for q in obs_traces]
-                stationary_dist = calc_stationary_dist(t_mat_adv)
-                if num_states_adv < num_states_user:
-                    continue
-
             print_stats(t_mat_adv)
 
             import sys
@@ -112,31 +91,7 @@ class MarkovSorting(KeywordQueryAttack):
                 recovered = ["" for q in queries]
                 for i, q in enumerate(queries):
                     if q in res.keys():
-                        if self._transform:
-                            res[q] = alt_map[res[q]]
-                        if self._pancake:
-                            # here add the needed changes for pancake integration
-                            continue
                         if res[q] in keyword_to_state.inverse.keys():
                             recovered[i] = keyword_to_state.inverse[res[q]]
 
         return recovered
-
-
-class TransformedMarkovSorting(MarkovSorting):
-    def __init__(self, known: Union[QuerySequence, List[List[str]]]):
-        super().__init__(known)
-        self._transform = True
-
-    @classmethod
-    def name(cls) -> str:
-        return "TransformedMarkovSorting"
-
-class PancakeMarkovSorting(MarkovSorting):
-    def __init__(self, known: Union[QuerySequence, List[List[str]]]):
-        super().__init__(known)
-        self._pancake = True
-
-    @classmethod
-    def name(cls) -> str:
-        return "PancakeMarkovSorting"

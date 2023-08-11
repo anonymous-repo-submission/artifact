@@ -13,7 +13,7 @@ from scipy.optimize import linear_sum_assignment as hungarian
 
 from leaker.api import Extension, KeywordQueryAttack, LeakagePattern, QuerySequence
 from leaker.pattern import QueryEquality
-from .util import trans_matrix_from_seq, calc_stationary_dist, transform, pancake, pancake_params
+from .util import trans_matrix_from_seq, calc_stationary_dist
 
 log = getLogger(__name__)
 
@@ -83,9 +83,6 @@ class MarkovIHOP(KeywordQueryAttack):
     __pfree: float
     __niters: int
     __aux: Dict
-    __ep: float
-    _transform: bool
-    _pancake: bool
 
     def __init__(self, known: Union[QuerySequence, List[List[str]]], pfree: float = 0.1, niters: int = 10000,
                  ep: float = 1e-20):
@@ -98,8 +95,6 @@ class MarkovIHOP(KeywordQueryAttack):
         self.__pfree = pfree
         self.__niters = niters
         self.__ep = ep
-        self._transform = False
-        self._pancake = False
 
     @classmethod
     def name(cls) -> str:
@@ -130,7 +125,7 @@ class MarkovIHOP(KeywordQueryAttack):
             else:
                 num_states_adv = len(set(u_seq))
 
-            if num_states_adv < ntok and not self._transform:
+            if num_states_adv < ntok :
                 continue
             if isinstance(u_seq, QuerySequence):
                 t_mat_adv = u_seq.original_transition_matrix
@@ -138,61 +133,11 @@ class MarkovIHOP(KeywordQueryAttack):
             else:
                 t_mat_adv, keyword_to_state = trans_matrix_from_seq(u_seq, num_states_adv)
 
-            if self._transform:
-                t_mat_adv, alt_map = transform(t_mat_adv)
-                num_states_adv = len(t_mat_adv[0])
-                # if num_states_adv < ntok:
-                #    continue
 
             aux = dict()
             aux['num_states'] = num_states_adv
             aux['freq_tra_mat'] = t_mat_adv.T
 
-            if self._pancake:
-                """ 
-                The Pancake countermeasure was implemented by Simon Oya in his paper IHOP
-                https://github.com/simon-oya/USENIX22-ihop-code/
-                """
-
-                markov_aux = markov_aux_and_mapping(aux, self.__ep)
-                alt_state_map, obs_traces, kwd_to_dummy_st = pancake(queries, markov_aux, keyword_to_state)
-
-                stationary_dist_aux = calc_stationary_dist(markov_aux)
-                nkw = len(markov_aux[0])
-                nrep = 2 * nkw
-                prob_reals, prob_dummies, replicas_per_kw = pancake_params(nkw, stationary_dist_aux)
-                aux = [0] + list(np.cumsum(replicas_per_kw, dtype=int))
-                kw_id_to_replicas = [tuple(range(aux[i], aux[i + 1])) for i in range(len(aux) - 1)]
-                rep_to_kw = {rep: kw for kw, replica_list in enumerate(kw_id_to_replicas) for rep in replica_list}
-
-                c1 = 0.105
-                m2 = markov_aux @ markov_aux
-                m3 = m2 @ markov_aux
-
-                mjoint = np.zeros((nkw + 1, nkw + 1))
-                mjoint[:nkw, :nkw] = (0.81 * markov_aux + 0.17 * m2 + 0.02 * m3) * stationary_dist_aux
-                mjoint_keywords = c1 * mjoint + (0.25 - c1) * prob_reals * prob_reals.reshape(nkw + 1, 1) + \
-                                  0.25 * (prob_reals * prob_dummies.reshape(nkw + 1,
-                                                                            1) + prob_dummies * prob_reals.reshape(
-                    nkw + 1, 1)) + \
-                                  0.25 * prob_dummies * prob_dummies.reshape(nkw + 1, 1)
-                mj_theo = np.zeros((nrep, nrep))
-                for i in range(nrep):
-                    for j in range(nrep):
-                        mj_theo[i, j] = mjoint_keywords[rep_to_kw[i], rep_to_kw[j]] / (
-                                len(kw_id_to_replicas[rep_to_kw[i]]) * len(kw_id_to_replicas[rep_to_kw[j]]))
-                mm_theo = mj_theo / np.sum(mj_theo, axis=0)
-
-                state_map = bidict({k: v for k, v in enumerate(set(obs_traces))})
-                token_sequence = [state_map.inverse[q] for q in obs_traces]
-                unq_qrs = sorted(set(token_sequence), key=token_sequence.index)
-                token_map = [(k, v) for k, v in enumerate(unq_qrs)]
-                ntok = len(token_map)
-                recovered = ["" for q in obs_traces]
-                num_states_adv = len(set(obs_traces))
-                aux = dict()
-                aux['num_states'] = num_states_adv
-                aux['freq_tra_mat'] = mm_theo.T
 
             compute_coef_matrix = update_coefficients(token_sequence, token_map, aux, self.__ep)
 
@@ -261,8 +206,6 @@ class MarkovIHOP(KeywordQueryAttack):
 
                 recovered = []
                 for s in predicted_states:
-                    if self._transform:
-                        s = alt_map[s]
                     if s in keyword_to_state.inverse.keys():
                         recovered.append(keyword_to_state.inverse[s])
                     else:
@@ -271,23 +214,3 @@ class MarkovIHOP(KeywordQueryAttack):
         return recovered
 
 
-class TransformedMarkovIHOP(MarkovIHOP):
-    def __init__(self, known: Union[QuerySequence, List[List[str]]], pfree: float = 0.1, niters: int = 10000,
-                 ep: float = 1e-20):
-        super().__init__(known, pfree, niters, ep)
-        self._transform = True
-
-    @classmethod
-    def name(cls) -> str:
-        return "TransformedMarkovIHOP"
-
-
-class PancakeMarkovIHOP(MarkovIHOP):
-    def __init__(self, known: Union[QuerySequence, List[List[str]]], pfree: float = 0.1, niters: int = 10000,
-                 ep: float = 1e-20):
-        super().__init__(known, pfree, niters, ep)
-        self._pancake = True
-
-    @classmethod
-    def name(cls) -> str:
-        return "PancakeMarkovIHOP"
