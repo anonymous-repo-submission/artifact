@@ -13,7 +13,7 @@ from hmmlearn import hmm
 
 from leaker.api import Extension, KeywordQueryAttack, LeakagePattern, QuerySequence
 from leaker.pattern import QueryEquality
-from .util import calc_stationary_dist, trans_matrix_from_seq, print_stats
+from .util import calc_stationary_dist, trans_matrix_from_seq
 from scipy.stats import binom
 
 log = getLogger(__name__)
@@ -71,7 +71,6 @@ class MarkovDecoding(KeywordQueryAttack):
 
 
             stationary_dist = calc_stationary_dist(t_mat_adv)
-            print_stats(t_mat_adv)
 
             big_o = [[None] * unique_queries for _ in range(num_states_adv)]
 

@@ -13,7 +13,7 @@ from bidict import bidict
 from typing import List, Union, Iterable, Tuple, Iterator, Optional, Type, Dict
 
 from leaker.api import KeywordQuerySpace, AttackDefinition, QuerySequence, KeywordQueryLog
-from leaker.attack.markov.util import trans_matrix_from_seq, remove_all_except_keywords
+from leaker.attack.markov.util import trans_matrix_from_seq
 from .errors import Error
 from .param import EvaluationCase, DatasetSampler, QuerySelector, KeywordQueryScenario
 from ..api import Attack, RangeAttack, KeywordAttack, Dataset, DataSink, RangeQuerySpace, RangeDatabase

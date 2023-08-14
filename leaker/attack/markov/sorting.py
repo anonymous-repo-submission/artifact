@@ -13,7 +13,7 @@ from bidict import bidict
 
 from leaker.api import Extension, KeywordQueryAttack, LeakagePattern, QuerySequence
 from leaker.pattern import QueryEquality
-from .util import calc_stationary_dist, trans_matrix_from_seq, print_stats
+from .util import calc_stationary_dist, trans_matrix_from_seq
 
 log = getLogger(__name__)
 
@@ -61,15 +61,6 @@ class MarkovSorting(KeywordQueryAttack):
 
 
             stationary_dist = calc_stationary_dist(t_mat_adv)
-            print_stats(t_mat_adv)
-
-            import sys
-            original_stdout = sys.stdout
-            with open('stats.txt', 'a+') as f:
-                f.write(f"{self.name()}  stats: ")
-                sys.stdout = f  # Change the standard output to the file we created.
-                print_stats(t_mat_adv)
-                sys.stdout = original_stdout  # Reset the standard output to its original value
 
             res: Dict[int, int] = {}
             big_s: Set[int] = set()

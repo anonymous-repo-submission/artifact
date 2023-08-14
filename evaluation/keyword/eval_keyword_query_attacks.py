@@ -8,7 +8,7 @@ import logging
 import sys
 
 from leaker.attack import MarkovSorting, FullUserQueryLogSpace, MarkovIHOP
-from leaker.attack.markov import MarkovDecoding
+from leaker.attack.markov import MarkovDecoding, BinomialMarkovDecoding
 from leaker.evaluation import EvaluationCase
 from leaker.evaluation.evaluator import KeywordQueryAttackEvaluator
 from leaker.evaluation.param import KeywordQueryScenario
@@ -32,6 +32,11 @@ log = logging.getLogger(__name__)
 
 backend = WhooshBackend()
 file_description = "test"
+
+'''
+The aol_new Querylog used here to evaluate the AOL dataset can be indexed using the index_aol.py, 
+same can be done for the TAIR Dataset using index_tait.py  
+'''
 
 for freq, freq_str in [(True, "infreq")]:
     q_log = backend.load_querylog(f"aol_new", pickle_description=file_description, min_user_count=22, max_user_count=27,
@@ -69,11 +74,11 @@ for freq, freq_str in [(True, "infreq")]:
 
                 log.info(f"The max number of states is {num_states}. Number of states of each user are {[len(q_log.keywords(i, remove_endstates=True)) for i in q_log.user_ids()]}")
 
-                eva = KeywordQueryAttackEvaluator(EvaluationCase([MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
+                eva = KeywordQueryAttackEvaluator(EvaluationCase([BinomialMarkovDecoding, MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
                                                                  dataset=q_log_adv, runs=10, scenario=scen),
                                                   qsp,
                                                   query_counts=[10**3, 10**4, 5*10**4, 10**5, 5*10**5],
-                                                  sinks=RangeMatPlotLibSink(f"markovfinalFINAL_aol__{i}_{sample_string}_{scen}.png", use_mean=False),
+                                                  sinks=RangeMatPlotLibSink(f"markovFINAL_AOL__{i}_{sample_string}_{scen}.png", use_mean=False),
                                                   parallelism=30)
 
                 eva.run()

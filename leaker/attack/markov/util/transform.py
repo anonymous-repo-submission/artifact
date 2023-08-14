@@ -13,36 +13,6 @@ from bidict import bidict
 from sklearn.preprocessing import normalize
 
 
-def print_stats(t_mat):
-    num_states = t_mat.shape[0]
-    no_not_changed = []
-    hw = []
-    mins = []
-    means = []
-    maxs = []
-    for i in range(num_states):
-
-        try:
-            no_not_changed.append(len(np.where(np.logical_and(t_mat[i] > 0.0, t_mat[i] < 0.2))[0]))
-        except ValueError:
-            pass
-        try:
-            mins.append(np.min(t_mat[i][np.nonzero(t_mat[i])]))
-        except ValueError:
-            pass
-        try:
-            hw.append(len(np.nonzero(t_mat[i])[0]))
-        except ValueError:
-            pass
-        means.append(np.mean(t_mat[i]))
-        maxs.append(np.max(t_mat[i]))
-
-    print(
-        f"({np.mean(mins)}, {np.mean(means)}, {np.mean(maxs)}). Avg no. not changed: {np.mean(no_not_changed)}. Avg. HW: {np.mean(hw)}")
-
-
-
-
 def remove_all_except_keywords(transition_matrix, keyword_to_state, keywords_to_keep):
     """Take a transition matrix and remove all nodes that do not occur in keywords_to_keep
     (keywords that appear in the training set), then return a new trained and normalized transition matrix
