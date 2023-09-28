@@ -14,8 +14,9 @@ The implementation of the attacks can be found in `leaker/attack/markov` directo
 Refer to `tests/test_markov_attacks.py` to see a standalone test case for our attacks in both 
 artificial distributions and query log settings.
 
-Prio to performing the evaluations, both TAIR and AOL need to be downloaded, extracted and indexed into a corresponding subdirectory, 
+Prio to performing the evaluations, both `TAIR`[[Qlog]](https://doi.ipk-gatersleben.de/DOI/a8d78c11-bb09-43a9-8eb4-591fa1266133/9462b38e-bb71-44ba-b95d-42bebf1cbf81/2) and `AOL`[[Qlog]](https://jeffhuang.com/search_query_logs/) need to be downloaded, extracted and indexed into a corresponding subdirectory, 
 the indexing files can be found in `evaluation/keyword/index_aol.py` & `evaluation/keyword/index_tair.py`.
+Our attacks require indexing only the query logs. Thus, we have commented out the original TAIR data collection indexing. 
 
 The evaluation files needed in order to reproduce the results of our paper can be found in: 
 `evaluation/keyword/eval_keyword_query_attacks_artificial.py`  & `evaluation/keyword/eval_keyword_query_attacks.py`

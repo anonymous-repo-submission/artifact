@@ -17,7 +17,7 @@ from .glmp19 import ApproxValue, ApproxOrder
 from .glmp18 import GLMP18
 from .dummy import RangeBaselineAttack, RangeCountBaselineAttack
 from .gjw import GJWbasic, GJWspurious, GJWmissing, GJWpartial
-from .markov import MarkovSorting, MarkovDecoding, MarkovIHOP, BinomialMarkovDecoding
+from .markov import MarkovStationary, MarkovDecoding, MarkovIHOP, BinomialMarkovDecoding
 
 __all__ = [
     'FullQuerySpace', 'PartialQuerySpace', 'FullQueryLogSpace', 'PartialQueryLogSpace', 'FullUserQueryLogSpace',
@@ -58,5 +58,5 @@ __all__ = [
 
     'GJWbasic', 'GJWspurious',  'GJWmissing', 'GJWpartial',  # gjw.py
 
-    'MarkovSorting', 'MarkovDecoding', 'MarkovIHOP',  'BinomialMarkovDecoding',  # markov
+    'MarkovStationary', 'MarkovDecoding', 'MarkovIHOP',  'BinomialMarkovDecoding',  # markov
 ]

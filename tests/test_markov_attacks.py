@@ -12,7 +12,7 @@ import numpy as np
 
 from leaker.api import DataSink
 from leaker.api.dataset import DummyKeywordQueryLogFromList
-from leaker.attack import MarkovSorting, MarkovIHOP
+from leaker.attack import MarkovStationary, MarkovIHOP
 from leaker.attack.markov import MarkovDecoding
 
 from leaker.attack.query_space import ZipfZipfKeywordQuerySpace, FullUserQueryLogSpace
@@ -74,7 +74,7 @@ def test_markov_attacks():
     verifier = EvaluatorTestSink(verif_cb)
 
     run = KeywordQueryAttackEvaluator(
-        EvaluationCase([MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
+        EvaluationCase([MarkovStationary, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
                        dataset=None, runs=1, scenario=KeywordQueryScenario.ARTIFICIAL_KNOWN_DIST),
         ZipfZipfKeywordQuerySpace(num_states, None, True),
         query_counts=[5*10 ** 5],
@@ -114,7 +114,7 @@ def test_qlog_markov_attacks():
     verifier = EvaluatorTestSink(verif_cb)
 
     run = KeywordQueryAttackEvaluator(
-        EvaluationCase([MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
+        EvaluationCase([MarkovStationary, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
                        dataset=qlog, runs=1, scenario=KeywordQueryScenario.EXACT),
         FullUserQueryLogSpace(num_states, qlog, True),
         query_counts=[10 ** 4],

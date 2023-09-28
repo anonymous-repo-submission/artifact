@@ -7,7 +7,7 @@ For License information see the LICENSE file.
 import logging
 import sys
 
-from leaker.attack import MarkovSorting, FullUserQueryLogSpace, MarkovIHOP
+from leaker.attack import MarkovStationary, FullUserQueryLogSpace, MarkovIHOP
 from leaker.attack.markov import MarkovDecoding, BinomialMarkovDecoding
 from leaker.evaluation import EvaluationCase
 from leaker.evaluation.evaluator import KeywordQueryAttackEvaluator
@@ -74,7 +74,7 @@ for freq, freq_str in [(True, "infreq")]:
 
                 log.info(f"The max number of states is {num_states}. Number of states of each user are {[len(q_log.keywords(i, remove_endstates=True)) for i in q_log.user_ids()]}")
 
-                eva = KeywordQueryAttackEvaluator(EvaluationCase([BinomialMarkovDecoding, MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
+                eva = KeywordQueryAttackEvaluator(EvaluationCase([BinomialMarkovDecoding, MarkovStationary, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
                                                                  dataset=q_log_adv, runs=10, scenario=scen),
                                                   qsp,
                                                   query_counts=[10**3, 10**4, 5*10**4, 10**5, 5*10**5],

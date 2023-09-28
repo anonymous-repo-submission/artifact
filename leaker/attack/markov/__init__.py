@@ -1,10 +1,10 @@
-from .sorting import MarkovSorting
+from .stationary import MarkovStationary
 from .decoding import MarkovDecoding, BinomialMarkovDecoding
 from .ihop import MarkovIHOP
 from .util import baum_welch
 
 __all__ = [
-    'MarkovSorting',   # sorting.py
+    'MarkovStationary',   # stationary.py
 
     'MarkovDecoding',  'BinomialMarkovDecoding', # decoding.py
 

@@ -1,5 +1,5 @@
 """
-This file implement the MarkovSorting Markov Attack.
+This file implement the MarkovStationary Markov Attack.
 
 For License information see the LICENSE file.
 
@@ -20,7 +20,7 @@ log = getLogger(__name__)
 E = TypeVar("E", bound=Extension, covariant=True)
 
 
-class MarkovSorting(KeywordQueryAttack):
+class MarkovStationary(KeywordQueryAttack):
 
     def __init__(self, known: Union[QuerySequence, List[List[str]]], **kwargs):
         super().__init__(known, **kwargs)
@@ -31,7 +31,7 @@ class MarkovSorting(KeywordQueryAttack):
 
     @classmethod
     def name(cls) -> str:
-        return "MarkovSorting"
+        return "MarkovStationary"
 
     @classmethod
     def required_leakage(cls) -> List[LeakagePattern[Any]]:

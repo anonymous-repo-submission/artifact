@@ -7,7 +7,7 @@ For License information see the LICENSE file.
 import logging
 import sys
 
-from leaker.attack import MarkovSorting, MarkovIHOP
+from leaker.attack import MarkovStationary, MarkovIHOP
 from leaker.attack.markov import MarkovDecoding, BinomialMarkovDecoding
 from leaker.attack.query_space import ZipfKeywordQuerySpace, ZipfZipfKeywordQuerySpace, ErdosGraphKeywordQuerySpace, \
     UniformKeywordQuerySpace
@@ -35,7 +35,7 @@ for qsp in [ZipfKeywordQuerySpace, ZipfZipfKeywordQuerySpace, ErdosGraphKeywordQ
         log.info(f"Running artificial eval for {num_states} states.")
         scen = KeywordQueryScenario.ARTIFICIAL_KNOWN_DIST
         eva = KeywordQueryAttackEvaluator(
-            EvaluationCase([BinomialMarkovDecoding, MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
+            EvaluationCase([BinomialMarkovDecoding, MarkovStationary, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
                            dataset=None, runs=30, scenario=scen),
             qsp(num_states),
             query_counts=[10 ** 3, 10 ** 4, 5 * 10 ** 4, 10 ** 5, 5 * 10 ** 5],
@@ -50,7 +50,7 @@ for min_hw in [5, 100, 350, 450]:
     log.info(f"Running artificial eval for {num_states} states with min weight {min_hw}.")
     scen = KeywordQueryScenario.ARTIFICIAL_KNOWN_DIST
     eva = KeywordQueryAttackEvaluator(
-        EvaluationCase([BinomialMarkovDecoding, MarkovSorting, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
+        EvaluationCase([BinomialMarkovDecoding, MarkovStationary, MarkovDecoding, MarkovIHOP.definition(pfree=.25, niters=10000)],
                        dataset=None, runs=30, scenario=scen),
         ZipfZipfKeywordQuerySpace(num_states, min_hw=min_hw),
         query_counts=[10 ** 3, 10 ** 4, 5 * 10 ** 4, 10 ** 5, 5 * 10 ** 5],

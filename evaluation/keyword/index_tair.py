@@ -60,5 +60,5 @@ tair_sink: Sink[InputDocument] = WhooshWriter("tair_db")
 preprocessor = Preprocessor(tairql, [tairql_filter > tairql_sink])
 preprocessor.run()
 
-preprocessor = Preprocessor(tair, [tair_filter > tair_sink, tair_xml_filter > tair_sink])
-preprocessor.run()
+#preprocessor = Preprocessor(tair, [tair_filter > tair_sink, tair_xml_filter > tair_sink])
+#preprocessor.run()
